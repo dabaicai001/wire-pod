@@ -31,6 +31,7 @@ type apiConfig struct {
 		OpenAIPrompt           string  `json:"openai_prompt"`
 		OpenAIVoice            string  `json:"openai_voice"`
 		OpenAIVoiceWithEnglish bool    `json:"openai_voice_with_english"`
+		BaseUrl                string  `json:"base_url"`
 		SaveChat               bool    `json:"save_chat"`
 		CommandsEnable         bool    `json:"commands_enable"`
 		Endpoint               string  `json:"endpoint"`

@@ -135,7 +135,7 @@ func removeEmojis(input string) string {
 }
 
 func CreateAIReq(transcribedText, esn string, gpt3tryagain, isKG bool) openai.ChatCompletionRequest {
-	defaultPrompt := "You are a helpful, animated robot called Vector. Keep the response concise yet informative."
+	defaultPrompt := "你是一个乐于助人的活泼机器人，名字叫Vector。回答要简洁但内容丰富。"
 
 	var nChat []openai.ChatCompletionMessage
 
@@ -154,6 +154,9 @@ func CreateAIReq(transcribedText, esn string, gpt3tryagain, isKG bool) openai.Ch
 		model = openai.GPT3Dot5Turbo
 	} else if vars.APIConfig.Knowledge.Provider == "openai" {
 		model = openai.GPT4oMini
+		logger.Println("Using " + model)
+	} else if vars.APIConfig.Knowledge.Provider == "qwen" {
+		model = "qwen3-max"
 		logger.Println("Using " + model)
 	} else {
 		logger.Println("Using " + vars.APIConfig.Knowledge.Model)
@@ -175,8 +178,8 @@ func CreateAIReq(transcribedText, esn string, gpt3tryagain, isKG bool) openai.Ch
 
 	aireq := openai.ChatCompletionRequest{
 		Model:            model,
-		MaxTokens:        2048,
-		Temperature:      1,
+		MaxTokens:        4096,
+		Temperature:      0.5,
 		TopP:             1,
 		FrequencyPenalty: 0,
 		PresencePenalty:  0,
@@ -252,7 +255,9 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 		conf.BaseURL = vars.APIConfig.Knowledge.Endpoint
 		c = openai.NewClientWithConfig(conf)
 	} else if vars.APIConfig.Knowledge.Provider == "openai" {
-		c = openai.NewClient(vars.APIConfig.Knowledge.Key)
+		conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
+		conf.BaseURL = vars.APIConfig.Knowledge.BaseUrl // 这里设置自定义URL
+		c = openai.NewClientWithConfig(conf)
 	}
 	speakReady := make(chan string)
 	successIntent := make(chan bool)
@@ -261,7 +266,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 
 	stream, err := c.CreateChatCompletionStream(ctx, aireq)
 	if err != nil {
-        	log.Printf("Error creating chat completion stream: %v", err)
+		log.Printf("Error creating chat completion stream: %v", err)
 		if strings.Contains(err.Error(), "does not exist") && vars.APIConfig.Knowledge.Provider == "openai" {
 			logger.Println("GPT-4 model cannot be accessed with this API key. You likely need to add more than $5 dollars of funds to your OpenAI account.")
 			logger.LogUI("GPT-4 model cannot be accessed with this API key. You likely need to add more than $5 dollars of funds to your OpenAI account.")
@@ -345,10 +350,10 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 				return
 			}
 
-            		if (len(response.Choices) == 0) {
-                		logger.Println("Empty response")
-                		return
-            		}
+			if len(response.Choices) == 0 {
+				logger.Println("Empty response")
+				return
+			}
 
 			fullfullRespText = fullfullRespText + removeSpecialCharacters(response.Choices[0].Delta.Content)
 			fullRespText = fullRespText + removeSpecialCharacters(response.Choices[0].Delta.Content)
