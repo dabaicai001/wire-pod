@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 UNAME=$(uname -a)
 COMMIT_HASH="$(git rev-parse --short HEAD)"
