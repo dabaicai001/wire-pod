@@ -432,7 +432,7 @@ func DoSayText_QwenTTS(robot *vector.Vector, input string) error {
 	}
 
 	var apiResp QwenTTSResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
 		logger.Println("Qwen-TTS response decode error:", err)
 		return err
 	}
