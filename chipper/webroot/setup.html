@@ -133,6 +133,27 @@
                 <option value="nova">Nova</option>
                 <option value="shimmer">Shimmer</option>
               </select>
+              <br />
+            </span>
+            <span id="qwenTTSVoiceForEnglishInput" style="display: none">
+              <label for="qwenTTSVoice">Qwen-TTS voice for non-English languages:</label><br />
+              <small class="desc">Qwen-TTS provides high-quality Chinese and English speech synthesis with emotional voices.</small><br />
+              <select name="qwenTTSVoice" id="qwenTTSVoice">
+                <option value="zhitian" selected>知甜 (标准)</option>
+                <option value="zhitian_emo">知甜-情感</option>
+                <option value="zhizhe">知哲 (标准)</option>
+                <option value="zhizhe_emo">知哲-情感</option>
+                <option value="zhiyan">知燕 (标准)</option>
+                <option value="zhiyan_emo">知燕-情感</option>
+                <option value="zhiqi">知琪 (标准)</option>
+                <option value="zhiqi_emo">知琪-情感</option>
+                <option value="zhiling">知灵 (标准)</option>
+                <option value="zhiling_emo">知灵-情感</option>
+                <option value="zhimei">知美 (标准)</option>
+                <option value="zhimei_emo">知美-情感</option>
+                <option value="zhibei">知贝 (标准)</option>
+                <option value="zhibei_emo">知贝-情感</option>
+              </select>
             </span>
 
             <span id="customAIInput" style="display: none">
@@ -180,6 +201,12 @@
                 <input type="checkbox" id="voiceEnglishYes" name="voiceEnglishselect" />
                 <label class="checkbox-label" for="voiceEnglishYes">
                   Use the OpenAI TTS voice for English as well.
+                </label>
+              </span>
+              <span id="qwenTTSVoiceForEnglishInput" style="display: none">
+                <input type="checkbox" id="qwenTTSVoiceEnglishYes" name="qwenTTSVoiceEnglishselect" />
+                <label class="checkbox-label" for="qwenTTSVoiceEnglishYes">
+                  Use the Qwen-TTS voice for English as well (higher priority than OpenAI TTS).
                 </label>
               </span>
             </div>

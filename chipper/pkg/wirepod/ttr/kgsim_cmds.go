@@ -1,11 +1,14 @@
 package wirepod_ttr
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -152,7 +155,7 @@ func ModelIsSupported(cmd LLMCommand, model string) bool {
 func CreatePrompt(origPrompt string, model string, isKG bool) string {
 	prompt := origPrompt + "\n\n" + "Keep in mind, user input comes from speech-to-text software, so respond accordingly. No special characters, especially these: & ^ * # @ - . No lists. No formatting."
 	if vars.APIConfig.Knowledge.CommandsEnable {
-               prompt = prompt + "\n\n" + "You are running ON an Anki Vector robot. You have a set of commands. If you include an emoji, I will make you start over. If you want to use a command but it doesn't exist or your desired parameter isn't in the list, avoid using the command. The format is {{command||parameter}}. You can embed these in sentences. Example: \"User: How are you feeling? | Response: \"{{playAnimationWI||sad}} I'm feeling sad...\". Square brackets ([]) are not valid.\n\nUse the playAnimation or playAnimationWI commands if you want to express emotion! You are very animated and good at following instructions. Animation takes precendence over words. You are to include many animations in your response.\n\nHere is every valid command:"
+		prompt = prompt + "\n\n" + "You are running ON an Anki Vector robot. You have a set of commands. If you include an emoji, I will make you start over. If you want to use a command but it doesn't exist or your desired parameter isn't in the list, avoid using the command. The format is {{command||parameter}}. You can embed these in sentences. Example: \"User: How are you feeling? | Response: \"{{playAnimationWI||sad}} I'm feeling sad...\". Square brackets ([]) are not valid.\n\nUse the playAnimation or playAnimationWI commands if you want to express emotion! You are very animated and good at following instructions. Animation takes precendence over words. You are to include many animations in your response.\n\nHere is every valid command:"
 		for _, cmd := range ValidLLMCommands {
 			if ModelIsSupported(cmd, model) {
 				promptAppendage := "\n\nCommand Name: " + cmd.Command + "\nDescription: " + cmd.Description + "\nParameter choices: " + cmd.ParamChoices
@@ -290,10 +293,19 @@ func DoSayText(input string, robot *vector.Vector) error {
 	// just before vector speaks
 	removeSpecialCharacters(input)
 
+	// 优先使用Qwen-TTS（如果配置了QwenTTSWithEnglish）
+	if (vars.APIConfig.STT.Language != "en-US" && vars.APIConfig.Knowledge.Provider == "openai") || vars.APIConfig.Knowledge.QwenTTSWithEnglish {
+		err := DoSayText_QwenTTS(robot, input)
+		return err
+	}
+
+	// 其次使用OpenAI TTS（如果配置了OpenAIVoiceWithEnglish）
 	if (vars.APIConfig.STT.Language != "en-US" && vars.APIConfig.Knowledge.Provider == "openai") || vars.APIConfig.Knowledge.OpenAIVoiceWithEnglish {
 		err := DoSayText_OpenAI(robot, input)
 		return err
 	}
+
+	// 默认使用Vector内置语音
 	robot.Conn.SayText(
 		context.Background(),
 		&vectorpb.SayTextRequest{
@@ -311,6 +323,186 @@ func pcmLength(data []byte) time.Duration {
 	numSamples := len(data) / bytesPerSample
 	duration := time.Duration(numSamples*1000/sampleRate) * time.Millisecond
 	return duration
+}
+
+// Qwen-TTS语音映射函数
+func getQwenTTSVoice(voice string) string {
+	voiceMap := map[string]string{
+		"Cherry":   "芊悦",
+		"Ethan":    "晨煦",
+		"Nofish":   "不吃鱼",
+		"Jennifer": "詹妮弗",
+		"Ryan":     "甜茶",
+		"Katerina": "卡捷琳娜",
+		"Elias":    "墨讲师",
+		"Jada":     "上海-阿珍",
+		"Dylan":    "北京-晓东",
+		"Sunny":    "四川-晴儿",
+		"Li":       "南京-老李",
+		"Marcus":   "陕西-秦川",
+		"Roy":      "闽南-阿杰",
+		"Peter":    "天津-李彼得",
+		"Rocky":    "粤语-阿强",
+		"Kiki":     "粤语-阿清",
+		"Eric":     "四川-程川",
+	}
+	return voiceMap[voice]
+}
+
+// Qwen-TTS语音合成函数
+func DoSayText_QwenTTS(robot *vector.Vector, input string) error {
+	if strings.TrimSpace(input) == "" {
+		return nil
+	}
+
+	qwenVoice := getQwenTTSVoice(vars.APIConfig.Knowledge.QwenTTSVoice)
+
+	// Qwen-TTS API请求结构
+	type QwenTTSRequest struct {
+		Model string `json:"model"`
+		Input struct {
+			Text         string `json:"text"`
+			Voice        string `json:"voice"`
+			LanguageType string `json:"language_type"`
+		} `json:"input"`
+	}
+
+	reqBody := QwenTTSRequest{
+		Model: "qwen3-tts-flash",
+		Input: struct {
+			Text         string `json:"text"`
+			Voice        string `json:"voice"`
+			LanguageType string `json:"language_type"`
+		}{
+			Voice:        qwenVoice,
+			Text:         input,
+			LanguageType: "Chinese",
+		},
+	}
+	reqBody.Input.Text = input
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		logger.Println("Qwen-TTS JSON marshal error:", err)
+		return err
+	}
+
+	// 创建HTTP请求
+	req, err := http.NewRequest("POST", "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation", bytes.NewBuffer(jsonData))
+	if err != nil {
+		logger.Println("Qwen-TTS request creation error:", err)
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+vars.APIConfig.Knowledge.Key)
+	req.Header.Set("X-DashScope-SSE", "enable")
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Println("Qwen-TTS API call error:", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		logger.Println("Qwen-TTS API error: %s, response: %s", resp.Status, string(body))
+		return fmt.Errorf("Qwen-TTS API error: %s", resp.Status)
+	}
+
+	// 解析响应
+	type QwenTTSResponse struct {
+		StatusCode int    `json:"status_code"`
+		Message    string `json:"message"`
+		Output     struct {
+			Text         string `json:"text"`
+			FinishReason string `json:"finish_reason"`
+			Audio        struct {
+				Data      string `json:"data"`
+				Url       string `json:"url"`
+				Id        string `json:"id"`
+				ExpiresAt int64  `json:"expires_at"`
+			} `json:"audio"`
+		} `json:"output"`
+	}
+
+	var apiResp QwenTTSResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		logger.Println("Qwen-TTS response decode error:", err)
+		return err
+	}
+
+	// 检查任务状态
+	if apiResp.StatusCode != http.StatusOK {
+		// 对于异步任务，需要轮询获取结果
+		// 这里简化处理，直接返回错误
+		logger.Println("Qwen-TTS task not completed:", apiResp.Message)
+		return fmt.Errorf("Qwen-TTS task status: %s", apiResp.Message)
+	}
+
+	// 检查是否有音频数据
+	if apiResp.Output.Audio.Data == "" {
+		logger.Println("Qwen-TTS no audio data received")
+		return fmt.Errorf("no audio data received from Qwen-TTS")
+	}
+
+	// 解码base64音频数据
+	speechBytes, err := base64.StdEncoding.DecodeString(apiResp.Output.Audio.Data)
+	if err != nil {
+		logger.Println("Qwen-TTS base64 decode error:", err)
+		return err
+	}
+
+	// 设置音频流播放
+	vclient, err := robot.Conn.ExternalAudioStreamPlayback(context.Background())
+	if err != nil {
+		return err
+	}
+
+	vclient.Send(&vectorpb.ExternalAudioStreamRequest{
+		AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamPrepare{
+			AudioStreamPrepare: &vectorpb.ExternalAudioStreamPrepare{
+				AudioFrameRate: 16000,
+				AudioVolume:    100,
+			},
+		},
+	})
+
+	// 音频处理：将生成的音频降采样到16kHz（Vector要求的格式）
+	audioChunks := downsample24kTo16k(speechBytes)
+
+	var chunksToDetermineLength []byte
+	for _, chunk := range audioChunks {
+		chunksToDetermineLength = append(chunksToDetermineLength, chunk...)
+	}
+
+	// 流式播放：通过Vector的外部音频接口播放语音
+	go func() {
+		for _, chunk := range audioChunks {
+			vclient.Send(&vectorpb.ExternalAudioStreamRequest{
+				AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamChunk{
+					AudioStreamChunk: &vectorpb.ExternalAudioStreamChunk{
+						AudioChunkSizeBytes: 1024,
+						AudioChunkSamples:   chunk,
+					},
+				},
+			})
+			time.Sleep(time.Millisecond * 25)
+		}
+		vclient.Send(&vectorpb.ExternalAudioStreamRequest{
+			AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamComplete{
+				AudioStreamComplete: &vectorpb.ExternalAudioStreamComplete{},
+			},
+		})
+	}()
+
+	time.Sleep(pcmLength(chunksToDetermineLength) + (time.Millisecond * 50))
+	return nil
 }
 
 func getOpenAIVoice(voice string) openai.SpeechVoice {
@@ -477,10 +669,10 @@ func DoGetImage(msgs []openai.ChatCompletionMessage, param string, robot *vector
 	} else if vars.APIConfig.Knowledge.Provider == "openai" {
 		c = openai.NewClient(vars.APIConfig.Knowledge.Key)
 	} else if vars.APIConfig.Knowledge.Provider == "custom" {
-        conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
+		conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
 		conf.BaseURL = vars.APIConfig.Knowledge.Endpoint
 		c = openai.NewClientWithConfig(conf)
-    	}
+	}
 	ctx := context.Background()
 	speakReady := make(chan string)
 
