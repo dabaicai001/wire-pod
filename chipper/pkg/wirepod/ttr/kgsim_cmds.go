@@ -411,7 +411,7 @@ func DoSayText_QwenTTS(robot *vector.Vector, input string) error {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		logger.Println("Qwen-TTS API error: %s, response: %s", resp.Status, string(body))
+		logger.Println(fmt.Sprintf("Qwen-TTS API error: %s, response: %s", resp.Status, string(body)))
 		return fmt.Errorf("Qwen-TTS API error: %s", resp.Status)
 	}
 
