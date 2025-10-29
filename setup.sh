@@ -552,6 +552,7 @@ function setupSystemd() {
     echo "StartLimitBurst=5" >>wire-pod.service
     echo >>wire-pod.service
     echo "[Service]" >>wire-pod.service
+    echo "User=root" >>wire-pod.service
     echo "Type=simple" >>wire-pod.service
     echo "Restart=on-failure" >>wire-pod.service
     echo "RestartSec=5s" >>wire-pod.service
