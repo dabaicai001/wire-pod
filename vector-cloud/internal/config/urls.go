@@ -8,13 +8,14 @@ import (
 
 // URLs represents a set of URLs where Anki's cloud services can be reached
 type URLs struct {
-	JDocs          string  `json:"jdocs"`
-	Token          string  `json:"tms"`
-	Chipper        string  `json:"chipper"`
-	Check          string  `json:"check"`
-	LogFiles       string  `json:"logfiles"`
-	AppKey         string  `json:"appkey"`
-	OffboardVision *string `json:"offboard_vision,omitempty"`
+	JDocs                       string  `json:"jdocs"`
+	Token                       string  `json:"tms"`
+	Chipper                     string  `json:"chipper"`
+	Check                       string  `json:"check"`
+	LogFiles                    string  `json:"logfiles"`
+	AppKey                      string  `json:"appkey"`
+	OffboardVision              *string `json:"offboard_vision,omitempty"`
+	HotwordDetectionSensitivity string  `json:"hotwordDetectionSensitivity"`
 }
 
 // DefaultURLs provides a default, hard-coded configuration that can be used
